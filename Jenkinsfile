@@ -12,3 +12,6 @@ pipeline {
             steps {
                 sh 'pytest -q'
             }
+        }
+    }
+}
