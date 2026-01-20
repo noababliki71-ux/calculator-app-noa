@@ -25,7 +25,7 @@ pipeline {
             steps {
                 sh '''
                   echo "Building Docker image..."
-                  docker build -t $IMAGE_FULL_NAME .
+                  docker build -t $ECR_REPO_NAME:$IMAGE_TAG .
                   docker images | grep $ECR_REPO_NAME
                 '''
             }
@@ -47,11 +47,13 @@ pipeline {
                   aws ecr get-login-password --region $AWS_REGION \
                     | docker login --username AWS --password-stdin $ECR_REGISTRY
 
+                  echo "Tagging image..."
+                  docker tag $ECR_REPO_NAME:$IMAGE_TAG $IMAGE_FULL_NAME
+
                   echo "Pushing image to ECR..."
                   docker push $IMAGE_FULL_NAME
 
-                  echo "Pushed image:"
-                  echo $IMAGE_FULL_NAME
+                  echo "Pushed image: $IMAGE_FULL_NAME"
                 '''
             }
         }
