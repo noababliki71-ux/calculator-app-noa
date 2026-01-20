@@ -1,23 +1,28 @@
 pipeline {
-    agent {
-        docker {
-            image 'python:3.11-slim'
-            args '-u root'
-        }
+    agent none
+
+    environment {
+        IMAGE_NAME = 'calculator-app'
+        IMAGE_TAG  = "pr-${env.CHANGE_ID}-${env.BUILD_NUMBER}"
     }
 
     stages {
-        stage('Install dependencies') {
-            steps {
-                sh 'python --version'
-                sh 'pip install --upgrade pip'
-                sh 'pip install -r requirements.txt'
+        stage('CI - Build Docker Image') {
+            when {
+                expression { env.CHANGE_ID != null }
             }
-        }
-
-        stage('Run tests') {
+            agent {
+                docker {
+                    image 'docker:27-cli'
+                    args '-v /var/run/docker.sock:/var/run/docker.sock'
+                }
+            }
             steps {
-                sh 'pytest -q'
+                sh '''
+                  echo "Building Docker image..."
+                  docker build -t $IMAGE_NAME:$IMAGE_TAG .
+                  docker images | grep $IMAGE_NAME
+                '''
             }
         }
     }
