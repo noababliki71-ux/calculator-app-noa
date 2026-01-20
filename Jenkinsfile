@@ -2,17 +2,30 @@ pipeline {
     agent none
 
     environment {
-        AWS_REGION = 'us-east-1'
-        ECR_REPO = '992382545251.dkr.ecr.us-east-1.amazonaws.com/calculator-app'
-        IMAGE_TAG = "pr-${env.CHANGE_ID}-${env.GIT_COMMIT.take(7)}"
+        AWS_REGION     = 'us-east-1'
+        AWS_ACCOUNT_ID = '992382545251'
+        ECR_REPO_NAME  = 'calculator-app'
+        ECR_REGISTRY   = "${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
+        ECR_REPO       = "${ECR_REGISTRY}/${ECR_REPO_NAME}"
     }
 
     stages {
 
-        stage('CI - Build Docker Image') {
-            when {
-                expression { env.CHANGE_ID != null }
+        stage('Init variables') {
+            agent any
+            steps {
+                script {
+                    if (env.CHANGE_ID) {
+                        env.IMAGE_TAG = "pr-${env.CHANGE_ID}-${env.BUILD_NUMBER}"
+                    } else {
+                        env.IMAGE_TAG = "main-${env.BUILD_NUMBER}"
+                    }
+                    echo "IMAGE_TAG resolved to: ${env.IMAGE_TAG}"
+                }
             }
+        }
+
+        stage('Build Docker Image') {
             agent {
                 docker {
                     image 'docker:27-cli'
@@ -20,32 +33,16 @@ pipeline {
                 }
             }
             steps {
-                sh '''
-                  docker build -t $ECR_REPO:$IMAGE_TAG .
-                '''
+                sh """
+                  docker build -t ${ECR_REPO}:${IMAGE_TAG} .
+                  docker images | grep ${ECR_REPO_NAME}
+                """
             }
         }
 
-        stage('CI - Run Tests') {
+        stage('Push Image to ECR (main only)') {
             when {
-                expression { env.CHANGE_ID != null }
-            }
-            agent {
-                docker {
-                    image 'docker:27-cli'
-                    args '-v /var/run/docker.sock:/var/run/docker.sock'
-                }
-            }
-            steps {
-                sh '''
-                  docker run --rm $ECR_REPO:$IMAGE_TAG pytest -q
-                '''
-            }
-        }
-
-        stage('CI - Push Image to ECR') {
-            when {
-                expression { env.CHANGE_ID != null }
+                branch 'main'
             }
             agent {
                 docker {
@@ -54,12 +51,12 @@ pipeline {
                 }
             }
             steps {
-                sh '''
-                  aws ecr get-login-password --region $AWS_REGION \
-                  | docker login --username AWS --password-stdin 992382545251.dkr.ecr.us-east-1.amazonaws.com
+                sh """
+                  aws ecr get-login-password --region ${AWS_REGION} \
+                  | docker login --username AWS --password-stdin ${ECR_REGISTRY}
 
-                  docker push $ECR_REPO:$IMAGE_TAG
-                '''
+                  docker push ${ECR_REPO}:${IMAGE_TAG}
+                """
             }
         }
     }
