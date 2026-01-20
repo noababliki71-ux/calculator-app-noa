@@ -2,11 +2,11 @@ pipeline {
     agent none
 
     environment {
-        AWS_REGION = 'us-east-1'
+        AWS_REGION     = 'us-east-1'
         AWS_ACCOUNT_ID = '992382545251'
-        ECR_REPO_NAME = 'calculator-app'
-        ECR_REGISTRY = "${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
-        ECR_REPO = "${ECR_REGISTRY}/${ECR_REPO_NAME}"
+        ECR_REPO_NAME  = 'calculator-app'
+        ECR_REGISTRY   = "${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
+        ECR_REPO       = "${ECR_REGISTRY}/${ECR_REPO_NAME}"
     }
 
     stages {
@@ -20,7 +20,7 @@ pipeline {
                     } else {
                         env.IMAGE_TAG = "main-${env.BUILD_NUMBER}"
                     }
-                    echo "IMAGE_TAG = ${env.IMAGE_TAG}"
+                    echo "IMAGE_TAG resolved to: ${env.IMAGE_TAG}"
                 }
             }
         }
