@@ -2,9 +2,9 @@ pipeline {
     agent none
 
     environment {
-        AWS_REGION = 'us-east-1'
+        AWS_REGION   = 'us-east-1'
         ECR_REGISTRY = '992382545251.dkr.ecr.us-east-1.amazonaws.com'
-        IMAGE_NAME = 'calculator-app'
+        IMAGE_NAME   = 'calculator-app'
     }
 
     stages {
@@ -46,8 +46,7 @@ pipeline {
             }
             steps {
                 sh '''
-                  apk add --no-cache python3 py3-pip
-                  pip3 install awscli
+                  apk add --no-cache aws-cli
 
                   aws --version
                   docker --version
