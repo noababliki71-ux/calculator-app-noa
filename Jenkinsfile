@@ -6,15 +6,88 @@ pipeline {
         AWS_ACCOUNT_ID = '992382545251'
         ECR_REPO_NAME = 'calculator-app'
         ECR_REGISTRY = "${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
-        IMAGE_TAG = "pr-${env.CHANGE_ID}-${env.BUILD_NUMBER}"
-        IMAGE_FULL_NAME = "${ECR_REGISTRY}/${ECR_REPO_NAME}:${IMAGE_TAG}"
+        ECR_REPO = "${ECR_REGISTRY}/${ECR_REPO_NAME}"
     }
 
     stages {
 
-        stage('CI - Build Docker Image') {
+        stage('Set Image Tag') {
+            agent any
+            steps {
+                script {
+                    if (env.CHANGE_ID) {
+                        env.IMAGE_TAG = "pr-${env.CHANGE_ID}-${env.BUILD_NUMBER}"
+                    } else if (env.BRANCH_NAME == 'main') {
+                        env.IMAGE_TAG = "main-${env.BUILD_NUMBER}"
+                    } else {
+                        env.IMAGE_TAG = "dev-${env.BUILD_NUMBER}"
+                    }
+                    echo "IMAGE_TAG=${env.IMAGE_TAG}"
+                }
+            }
+        }
+
+        stage('Build Docker Image') {
+            agent {
+                docker {
+                    image 'docker:27-cli'
+                    args '-v /var/run/docker.sock:/var/run/docker.sock'
+                }
+            }
+            steps {
+                sh '''
+                  docker build -t ${ECR_REPO}:${IMAGE_TAG} .
+                  docker images | grep ${ECR_REPO_NAME}
+                '''
+            }
+        }
+
+        stage('Run Tests') {
+            agent {
+                docker {
+                    image 'docker:27-cli'
+                    args '-v /var/run/docker.sock:/var/run/docker.sock'
+                }
+            }
+            steps {
+                sh '''
+                  docker run --rm ${ECR_REPO}:${IMAGE_TAG} pytest -q
+                '''
+            }
+        }
+
+        stage('Login to ECR') {
+            agent {
+                docker {
+                    image 'amazon/aws-cli:2'
+                    args '-v /var/run/docker.sock:/var/run/docker.sock'
+                }
+            }
+            steps {
+                sh '''
+                  aws ecr get-login-password --region ${AWS_REGION} \
+                  | docker login --username AWS --password-stdin ${ECR_REGISTRY}
+                '''
+            }
+        }
+
+        stage('Push Image to ECR') {
+            agent {
+                docker {
+                    image 'docker:27-cli'
+                    args '-v /var/run/docker.sock:/var/run/docker.sock'
+                }
+            }
+            steps {
+                sh '''
+                  docker push ${ECR_REPO}:${IMAGE_TAG}
+                '''
+            }
+        }
+
+        stage('Tag & Push latest (main only)') {
             when {
-                expression { env.CHANGE_ID != null }
+                branch 'main'
             }
             agent {
                 docker {
@@ -24,36 +97,8 @@ pipeline {
             }
             steps {
                 sh '''
-                  echo "Building Docker image..."
-                  docker build -t $ECR_REPO_NAME:$IMAGE_TAG .
-                  docker images | grep $ECR_REPO_NAME
-                '''
-            }
-        }
-
-        stage('CI - Push Image to ECR') {
-            when {
-                expression { env.CHANGE_ID != null }
-            }
-            agent {
-                docker {
-                    image 'amazon/aws-cli:2'
-                    args '-v /var/run/docker.sock:/var/run/docker.sock'
-                }
-            }
-            steps {
-                sh '''
-                  echo "Logging in to ECR..."
-                  aws ecr get-login-password --region $AWS_REGION \
-                    | docker login --username AWS --password-stdin $ECR_REGISTRY
-
-                  echo "Tagging image..."
-                  docker tag $ECR_REPO_NAME:$IMAGE_TAG $IMAGE_FULL_NAME
-
-                  echo "Pushing image to ECR..."
-                  docker push $IMAGE_FULL_NAME
-
-                  echo "Pushed image: $IMAGE_FULL_NAME"
+                  docker tag ${ECR_REPO}:${IMAGE_TAG} ${ECR_REPO}:latest
+                  docker push ${ECR_REPO}:latest
                 '''
             }
         }
